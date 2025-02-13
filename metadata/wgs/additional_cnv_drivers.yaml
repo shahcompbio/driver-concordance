@@ -1,0 +1,69 @@
+COAD:
+    - TP53
+    - APC
+    - KRAS
+    - PIK3CA
+    - SMAD4
+READ:
+    - TP53
+    - APC
+    - KRAS
+    - PIK3CA
+    - SMAD4
+SKCM:
+    - BRAF
+    - NRAS
+    - CDKN2A
+    - TERT
+    - TP53
+    - PTEN
+    - TP53
+ESCA:
+    - EGFR
+    - CDKN2A
+    - MYC
+    - SMAD4
+    - ERBB2
+STAD:
+    - TP53
+    - PIK3CA
+    - ARID1A
+    - ERBB2
+    - KRAS
+BRCA:
+    - TP53
+    - PIK3CA
+    - GATA3
+    - ERBB2
+    - MA3K1
+CHOL:
+    - CDKN2A
+    - BAP1
+    - ARID1A
+    - IDH1
+    - TP53
+OV:
+    - TP53
+    - BRCA1
+    - CDKN2A
+    - NF1
+    - BRCA2
+    - PIK3CA
+    - CTNNB1
+UCEC:
+    - PTEN
+    - ARID1A
+    - PIK3CA
+    - CTNNB1
+BLCA:
+    - TP53
+    - KMT2D
+    - KDM6A
+    - ARID1A
+    - PIK3CA
+    - RB1
+LUAD:
+    - EGFR
+    - TP53
+    - KRAS
+    - RB1

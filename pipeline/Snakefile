@@ -1,0 +1,30 @@
+import os
+import glob
+
+import pandas as pd
+
+data_dir = config['data_dir']
+base = config['base_dir']
+python_bin = config.get('python_bin', 'python')
+
+VEP_PATHS = pd.read_csv(os.path.join(base, config['HCMI']['mutation']['vcf_table']))
+VEP_SAMPLES = VEP_PATHS['tumor_short'].tolist()
+VEP_EXOME_PATHS = pd.read_csv(os.path.join(base, config['HCMI']['mutation']['vcf_table_exome']))
+VEP_EXOME_SAMPLES = VEP_EXOME_PATHS['tumor_id'].tolist()
+PATHS_CONSENSUS = pd.read_csv(os.path.join(base, config['HCMI']['cn']['consensus']['paths']))
+PATHS_REMIXT = pd.read_table(os.path.join(base, config['HCMI']['cn']['remixt']['paths']))
+SAMPLES_CONSENSUS = PATHS_CONSENSUS['sample_id'].tolist()
+SAMPLES_REMIXT = PATHS_REMIXT['sample_id'].tolist()
+
+include: "rules/vep.smk"
+include: "rules/collect.smk"
+include: "rules/process.smk"
+include: "rules/tcga.smk"
+
+rule all:
+    input:
+        os.path.join(base, config['plots']['fig2C_1']),
+        os.path.join(base, config['plots']['fig2C_2']),
+        os.path.join(base, config['plots']['fig2D']),
+        os.path.join(base, config['plots']['fig2E']),
+        os.path.join(base, config['plots']['fig3A_supplementary']),
