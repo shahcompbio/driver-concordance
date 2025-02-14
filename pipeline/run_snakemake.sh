@@ -9,8 +9,7 @@ cmd="$cmd --configfile config.yaml"
 cmd="$cmd --use-singularity"
 cmd="$cmd --dry-run"
 cmd="$cmd --forceall"
-# cmd="$cmd --rulegraph"
-# cmd="$cmd | dot -Tsvg > pipeline.svg"
+cmd="$cmd --rulegraph"
 
 # echo $cmd
 eval $cmd
