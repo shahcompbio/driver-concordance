@@ -10,8 +10,12 @@ This project is part of the **Genomic Data Analysis Network (GDAN)** initiative 
 - Next, edit `pipeline/config.yaml` to map the input large data files correctly.
 - If you want to start from the point where the copy number and mutation data are already compiled, you can use this Zenodo link (zenodo:...) to access `h5ad` files for the concordance calculation.
 
+### Pipeline structure
+This `snakemake` pipeline is structured as shown in the following graph:
+![Pipeline Overview](pipeline.png)
+
 ### Pipeline run command
-- Make sure `snakemake` is installed in your environment before proceeding.
+Make sure `snakemake` is installed in your environment before proceeding.
 
 ```bash
 cluster_fmt="sbatch --partition=componc_cpu --cpus-per-task={threads} --mem={resources.mem_mb} --job-name={rule}.{wildcards} --error=logs/{rule}/{rule}.{wildcards}.%j.err --output=logs/{rule}/{rule}.{wildcards}.%j.out --time=24:00:00"
