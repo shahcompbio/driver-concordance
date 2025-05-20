@@ -1,0 +1,1055 @@
+import collections
+from collections.abc import Mapping
+
+import panel as pn
+import matplotlib.pyplot as plt
+import matplotlib.colors
+import seaborn as sns
+import pandas as pd
+import numpy as np
+import anndata
+import matplotlib.patches as patches
+import matplotlib.cm as cm
+import matplotlib.collections as mc
+
+import scgenome
+from scgenome.plotting.cn import genome_axis_plot, setup_genome_xaxis_ticks, setup_genome_xaxis_lims
+from scgenome.plotting.cn_colors import color_reference
+import wgs_analysis.refgenome
+
+from gdan_hcmi_tools.copynumber import plot_cn_genome, load_remixt_cn, load_consensus_cn
+
+
+palette_concordance = { # Concordance palette from Jennifer
+    'Tumor only':'#fc4646', 
+    'Intersecting':'#93c6e2', 
+    'Model only':'#e1afbb'
+}
+
+palette_wgd = { # WGD palette
+    'Both WGD': '#93C6E2',
+    'Both diploid': '#46BEFF',
+    'Model WGD': '#E1AFBB', 
+    'Tumor WGD': '#FC4646',
+}
+
+
+default_heatmap_tab_plot_params = [
+    (
+        'state',
+        {
+            'layer_name': 'state',
+        },
+    ),
+    (
+        'copy',
+        {
+            'layer_name': 'copy',
+            'raw': True,
+            'vmin': 0.,
+            'vmax': 10.,
+        },
+    ),
+    (
+        'state_abs_diff',
+        {
+            'layer_name': 'state_abs_diff',
+            'raw': True,
+            'vmin': -0.5,
+            'vmax': 0.5,
+        },
+    ),
+    (
+        'copy_abs_diff',
+        {
+            'layer_name': 'copy_abs_diff',
+            'raw': True,
+            'vmin': -0.5,
+            'vmax': 0.5,
+        },
+    ),
+    (
+        'copy_state_abs_diff',
+        {
+            'layer_name': 'copy_state_abs_diff',
+            'raw': True,
+            'vmin': -0.5,
+            'vmax': 0.5,
+        },
+    ),
+]
+
+
+default_asheatmap_tab_plot_params = [
+    (
+        'state',
+        {
+            'layer_name': 'state',
+        },
+    ),
+    (
+        'Min',
+        {
+            'layer_name': 'Min',
+        },
+    ),
+    (
+        'Maj',
+        {
+            'layer_name': 'Maj',
+        },
+    ),
+    (
+        'copy',
+        {
+            'layer_name': 'copy',
+            'raw': True,
+            'vmin': 0.,
+            'vmax': 10.,
+        },
+    ),
+    (
+        'BAF',
+        {
+            'layer_name': 'BAF',
+            'raw': True,
+            'vmin': 0.,
+            'vmax': 1.,
+        },
+    ),
+    (
+        'state_abs_diff',
+        {
+            'layer_name': 'state_abs_diff',
+            'raw': True,
+            'vmin': -0.5,
+            'vmax': 0.5,
+        },
+    ),
+    (
+        'copy_abs_diff',
+        {
+            'layer_name': 'copy_abs_diff',
+            'raw': True,
+            'vmin': -0.5,
+            'vmax': 0.5,
+        },
+    ),
+    (
+        'copy_state_abs_diff',
+        {
+            'layer_name': 'copy_state_abs_diff',
+            'raw': True,
+            'vmin': -0.5,
+            'vmax': 0.5,
+        },
+    ),
+    (
+        'BAF_abs_diff',
+        {
+            'layer_name': 'BAF_abs_diff',
+            'raw': True,
+            'vmin': -0.5,
+            'vmax': 0.5,
+        },
+    ),
+    (
+        'BAF_ideal_abs_diff',
+        {
+            'layer_name': 'BAF_ideal_abs_diff',
+            'raw': True,
+            'vmin': -0.5,
+            'vmax': 0.5,
+        },
+    ),
+]
+
+
+def plot_heatmap_tabs(
+        adata,
+        plot_params,
+        cell_order_fields=('cluster_id', 'cell_order'),
+        annotation_fields=('cluster_id', 'is_outlier', 'library_id'),
+        var_annotation_fields=('cyto_band_giemsa_stain', 'gc'),
+    ):
+    """ Plot copy number for a chromosome in tabs with panel
+    
+    plot the current clustering showing raw and integer copy number
+    also, plot the difference between the cluster copy and each cell copy, notice some structure
+    """
+
+    tabs = pn.Tabs()
+
+    for name, params in plot_params:
+        fig = plt.figure(figsize=(8, 8), dpi=144)
+        scgenome.pl.plot_cell_cn_matrix_fig(
+            adata,
+            fig=fig,
+            cell_order_fields=cell_order_fields,
+            annotation_fields=annotation_fields,
+            var_annotation_fields=var_annotation_fields,
+            **params)
+        pfig = pn.pane.Matplotlib(fig, dpi=144, tight=True)
+        pfig.width = 800
+        pfig.height = 800
+        tabs.append((name, pfig))
+        plt.close()
+        
+    return tabs
+
+
+def get_feature_colors(features, palettes):
+    """ Get colors for features
+
+    Parameters
+    ----------
+    features : pandas.DataFrame
+        categorical features to color
+    palettes : dict
+        dictionary of palettes to use for each feature
+
+    Returns
+    -------
+    colors : pandas.DataFrame
+        dataframe of colors for each feature
+    attribute_to_color : dict
+        dictionary of attribute to color mapping
+    """
+    colors = features[palettes.keys()].copy()
+    attribute_to_color = dict()
+    for col in palettes.keys():
+        if colors[col].dtype.name == 'category':
+            unique_attrs = colors[col].cat.categories
+        else:
+            unique_attrs = sorted(colors[col].astype(str).unique())
+        if not isinstance(palettes[col], Mapping):
+            cmap = sns.color_palette(palette=palettes[col], n_colors=len(unique_attrs))
+            attribute_to_color[col] = dict(zip(unique_attrs, cmap))
+        else:
+            attribute_to_color[col] = {str(k): v for k, v in palettes[col].items()}
+        colors[col] = colors[col].astype(str).map(attribute_to_color[col])
+    return colors, attribute_to_color
+
+
+def plot_feature_colors_legends(attribute_to_color):
+    """ Plot feature colors legends
+
+    Parameters
+    ----------
+    attribute_to_color : dict
+        dictionary of attribute to color mapping, from `get_feature_colors`
+    """
+    for feature in attribute_to_color.keys():
+        plt.figure(figsize=(4, 1))
+        ax = plt.gca()
+        for attribute, color in attribute_to_color[feature].items():
+            ax.bar(0, 0, color=color, label=attribute, linewidth=0)
+        ax.legend(loc='center', ncols=7, bbox_to_anchor=(0.5, 0.5), title=feature)
+        ax.axis('off')
+
+
+def remove_xticklabels(ax, labels):
+    """ Remove a subset of the tick labels on the x axis, leaving ticks in place
+
+    Parameters
+    ----------
+    ax : matplotlib.Axes
+        axes to modify
+    labels : list
+        list of labels to remove
+    """
+    xticklabels = ax.get_xticklabels()
+    for label in xticklabels:
+        if label.get_text() in labels:
+            label.set_text('')
+    ax.set_xticklabels(xticklabels)
+
+
+def generate_color_legend(color_dict, dpi=150, order=None, ax=None, **kwargs):
+    """
+    Generates a legend for a given dictionary of colors.
+
+    Parameters
+    ----------
+    color_dict: dict
+        A dictionary where keys are the labels and values are the corresponding colors.
+    dpi : int
+        Figure dpi
+    
+
+    Returns
+    -------
+    legend : matplotlib.legend.Legend
+        A matplotlib legend object.
+    """
+    # Defaults
+    kwargs.setdefault('loc', 'upper left')
+    kwargs.setdefault('frameon', False)
+
+    # Create a list to hold the legend elements
+    legend_elements = []
+    
+    # Iterate over the dictionary to create a list of patches for the legend
+    if order is None:
+        order = color_dict.keys()
+    for label in order:
+        legend_elements.append(matplotlib.patches.Patch(color=color_dict[label], label=label))
+    
+    if ax is None:
+        # Create the figure and axes objects to plot the legend
+        fig, ax = plt.subplots(dpi=dpi)
+
+        # Hide the axes
+        ax.axis('off')
+
+    # Add the legend to the plot
+    legend = ax.legend(handles=legend_elements, **kwargs)
+    ax.add_artist(legend)
+    # legend._legend_box.align = "left"
+
+    return legend
+
+
+def style_barplot(ax):
+    ax.spines[['top', 'right']].set_visible(False)
+    ax.tick_params(axis='x', which='major', rotation=0)
+    ax.set_yticks(np.linspace(0, 1, 6))
+    ax.spines['left'].set_bounds(ax.get_yticks().min(), ax.get_yticks().max())
+    ax.yaxis.label.set_horizontalalignment('right')
+    ax.yaxis.label.set_verticalalignment('center')
+    ax.yaxis.label.set_rotation(0)
+
+
+# `A-Hom` = "#56941E",
+# `B-Hom` = "#471871",
+# `A-Gained` = "#94C773",
+# `B-Gained` = "#7B52AE",
+# `Balanced` = "#d5d5d4",
+
+allele_state_colors = collections.OrderedDict({
+    'A-Hom': '#56941E',
+    'A-Gained': '#94C773',
+    'Balanced': '#d5d5d4',
+    'B-Gained': '#7B52AE',
+    'B-Hom': '#471871',
+})
+
+allele_state_cmap = matplotlib.colors.ListedColormap([
+    '#56941E',
+    '#94C773',
+    '#d5d5d4',
+    '#7B52AE',
+    '#471871',
+])
+
+
+def add_allele_state_layer(adata):
+    """ Add a layer representing allelic states for plotting.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data object containing allelic state information.
+
+    Returns
+    -------
+    AnnData
+        Annotated data object with the 'allele_state' layer added.
+    """
+    allele_state = np.zeros(adata.shape)
+    allele_state[adata.layers['B'] == 0] = 0
+    allele_state[(adata.layers['A'] != 0) & (adata.layers['B'] != 0) & (adata.layers['A'] > adata.layers['B'])] = 1
+    allele_state[(adata.layers['A'] != 0) & (adata.layers['B'] != 0) & (adata.layers['A'] == adata.layers['B'])] = 2
+    allele_state[(adata.layers['A'] != 0) & (adata.layers['B'] != 0) & (adata.layers['B'] > adata.layers['A'])] = 3
+    allele_state[adata.layers['A'] == 0] = 4
+
+    adata.layers['allele_state'] = allele_state
+
+    return adata
+
+
+def plot_allele_cn_profile(adata, cell_id, ax=None, **kwargs):
+    """ Plot BAF colored by allele specific copy number state
+
+    Parameters
+    ----------
+    adata : anndata.AnnData
+        copy number anndata
+    cell_id : str
+        cell from adata.obs.index to plot
+    ax : matplotlib.Axes, optional
+        axes on which to plot, by default None, use plt.gca()
+    kwargs : dict
+        additional arguments to plot_profile
+    """
+
+    if ax is None:
+        ax = plt.gca()
+
+    if 's' not in kwargs:
+        kwargs['s'] = 2
+
+    if 'alpha' not in kwargs:
+        kwargs['alpha'] = 1.
+
+    plot_data = scgenome.tl.get_obs_data(
+        adata,
+        cell_id,
+        layer_names=['copy', 'BAF', 'state', 'A', 'B']
+    )
+
+    plot_data['ascn_state'] = 'Balanced'
+    plot_data.loc[plot_data['A'] > plot_data['B'], 'ascn_state'] = 'A-Gained'
+    plot_data.loc[plot_data['B'] > plot_data['A'], 'ascn_state'] = 'B-Gained'
+    plot_data.loc[plot_data['B'] == 0, 'ascn_state'] = 'A-Hom'
+    plot_data.loc[plot_data['A'] == 0, 'ascn_state'] = 'B-Hom'
+
+    scgenome.pl.plot_profile(
+        plot_data,
+        y='BAF',
+        hue='ascn_state',
+        ax=ax,
+        palette=allele_state_colors,
+        hue_order=allele_state_colors.keys(),
+    )
+
+    plt.ylabel('BAF')
+    sns.despine(trim=True)
+
+    scgenome.plotting.cn.setup_genome_xaxis_ticks(
+        ax, chromosome_names=dict(zip(
+            [str(a) for a in range(1, 23)] + ['X'],
+            ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '11', '', '13', '', '15', '', '', '18', '', '', '21', '', 'X'])))
+
+
+def get_color_from_colormap(value, min_value, max_value, colormap_name):
+    # Normalize the value to the range [0, 1]
+    normalized_value = (value - min_value) / (max_value - min_value)
+    
+    # Get the colormap
+    colormap = cm.get_cmap(colormap_name)
+    
+    # Get the color for the normalized value
+    color = colormap(normalized_value)
+    
+    return color
+
+
+def plot_cn_rect(
+        data,
+        obs_id=None,
+        ax=None,
+        y='state',
+        hue='state',
+        chromosome=None,
+        cmap=None,
+        vmin=None,
+        vmax=None,
+        color=None,
+        offset=0,
+        rect_kws=None,
+        fill_gaps=True):
+    """
+    Plot copy number rectangles on a genome axis.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame or anndata.AnnData
+        The data containing copy number information.
+    obs_id : str
+        The observation ID to extract data from an AnnData object.
+    ax : matplotlib.axes.Axes, optional
+        The axes to plot on. If not provided, the current axes will be used.
+    y : str, optional
+        The column name in the data to use as the y-coordinate of the rectangles. Default is 'state'.
+    hue : str, optional
+        The column name in the data to use for coloring the rectangles. Default is 'state'.
+    chromosome : str, optional
+        The chromosome to plot. If not provided, all chromosomes will be plotted.
+    cmap : matplotlib.colors.Colormap, optional
+        The colormap to use for coloring the rectangles. If not provided, a default colormap will be used based on the 'hue' column.
+    vmin : float, optional
+        The minimum value for the colormap. If not provided, the minimum value from the 'hue' column will be used.
+    vmax : float, optional
+        The maximum value for the colormap. If not provided, the maximum value from the 'hue' column will be used.
+    color : color, optional
+        Color value for all rectangles
+    offset : float, optional, default 0
+        y offset for rects
+    rect_kws : dict, optional
+        Additional keyword arguments for patches.Rectangle
+    fill_gaps: bool, optional, default True
+        fill gaps between segments
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+        The axes object containing the plotted copy number rectangles.
+    """
+
+    if ax is None:
+        ax = plt.gca()
+
+    if rect_kws is None:
+        rect_kws = dict()
+
+    rect_kws.setdefault('height', 0.7)
+    rect_kws.setdefault('linewidth', 0.)
+
+    # Check data is an adata
+    if isinstance(data, anndata.AnnData):
+        assert obs_id is not None
+
+        layers = {y}
+        if hue is not None:
+            layers.add(hue)
+
+        data = scgenome.tl.get_obs_data(
+            data,
+            obs_id,
+            layer_names=list(layers),
+        )
+
+    if fill_gaps:
+        data = data.sort_values(['chr', 'start'])
+
+        for chrom_, df in data.groupby('chr'):
+            # Bring end of each segment to start of next segment
+            data.loc[df.index[:-1], 'end'] = data.loc[df.index[1:], 'start'].values
+
+            # First segment starts at 0
+            data.loc[df.index[0], 'start'] = 0
+
+            # Last segment ends at chromosome length
+            data.loc[df.index[-1], 'end'] = scgenome.refgenome.info.chromosome_info.set_index('chr').loc[chrom_, 'chromosome_length']
+
+    if chromosome is not None:
+        data = data[data['chr'] == chromosome]
+
+    if hue is not None:
+        if cmap is None:
+            data['color'] = data[hue].map(color_reference)
+    
+        else:
+            if vmin is None:
+                vmin = data[hue].min()
+            if vmax is None:
+                vmax = data[hue].max()
+            data['color'] = data[hue].apply(lambda a: get_color_from_colormap(a, vmin, vmax, cmap))
+
+    elif color is not None:
+        data['color'] = color
+
+    def plot_rect(data, ax=None):
+        rectangles = []
+        for idx, row in data.iterrows():
+            width = row['end'] - row['start']
+            lower_left_x = row['start']
+            lower_left_y = row[y] - (rect_kws['height'] / 2.) + offset
+
+            # Create a rectangle patch
+            rect = patches.Rectangle(
+                (lower_left_x, lower_left_y),
+                width,
+                facecolor=row['color'],
+                **rect_kws)
+            rectangles.append(rect)
+
+        # Create a patch collection with the rectangles and add it to the Axes
+        pc = mc.PatchCollection(rectangles, match_original=True, zorder=2, rasterized=True)
+        ax.add_collection(pc)
+
+    genome_axis_plot(
+        data,
+        plot_rect,
+        ('start', 'end'),
+        ax=ax,
+    )
+
+    ax.set_ylim((data[y].min() - 0.5, data[y].max() + 0.5))
+    setup_genome_xaxis_ticks(ax, chromosome=chromosome)
+    setup_genome_xaxis_lims(ax, chromosome=chromosome)
+
+    ax.spines[['right', 'top']].set_visible(False)
+
+    return ax
+
+
+def pretty_cell_tcn(adata, cell_id, chromosome=None, fig=None, ax=None):
+    """
+    Generate a pretty cell-specific total copy number profile plot.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data object containing copy number information.
+    cell_id : str
+        Identifier of the cell for which to generate the plot.
+    chromosome : str, optional
+        Chromosome for which to generate the plot. If None, the plot will include all chromosomes.
+    fig : matplotlib.figure.Figure, optional
+        The figure to plot on. If not provided, a new figure will be created.
+    ax : matplotlib.axes.Axes, optional
+        The axes to plot on. If not provided, new axes will be created.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The generated figure object.
+    """
+
+    if fig is None:
+        fig = plt.figure(figsize=(6, 1.5), dpi=300)
+
+    if ax is None:
+        ax = plt.gca()
+
+    g = scgenome.pl.plot_cn_profile(
+        adata,
+        cell_id,
+        state_layer_name='state',
+        value_layer_name='copy',
+        chromosome=chromosome,
+        ax=ax,
+        squashy=True,
+        linewidth=0,
+        s=4,
+        alpha=1.,
+        hue_order=sorted(range(12)))
+    sns.despine(trim=True)
+    
+    sns.move_legend(
+        ax, 'upper left', prop={'size': 8}, markerscale=5, bbox_to_anchor=(1, 1),
+        labelspacing=0.4, handletextpad=0, columnspacing=0.5,
+        ncol=3, title='Total CN state', title_fontsize=10, frameon=False)
+
+    ax.grid(ls=':', lw=0.5, zorder=-100, which='major', axis='y')
+    ax.set_axisbelow(True)
+
+    if chromosome is None:
+        scgenome.plotting.cn.setup_genome_xaxis_ticks(
+            ax, chromosome_names=dict(zip(
+                [str(a) for a in range(1, 23)] + ['X'],
+                ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '11', '', '13', '', '15', '', '', '18', '', '', '21', '', 'X'])))
+
+    return fig
+
+
+def pretty_cell_ascn(adata, cell_id, fig=None, axes=None):
+    """
+    Plot a pretty cell ASCN (Allele-Specific Copy Number) profile.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data object containing the copy number data.
+    cell_id : str
+        Identifier of the cell to plot.
+    fig : matplotlib.figure.Figure, optional
+        The figure to plot on. If not provided, a new figure will be created.
+    axes : matplotlib.axes.Axes, optional
+        The axes to plot on. If not provided, new axes will be created.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The generated figure.
+
+    """
+    plot_data = scgenome.tl.get_obs_data(
+        adata,
+        cell_id,
+        layer_names=['copy', 'BAF', 'state', 'A', 'B']
+    )
+
+    assert (fig is None) == (axes is None)
+    if fig is None:
+        fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(6, 3), dpi=300, sharex=True)
+
+    ax = axes[0]
+    g = scgenome.pl.plot_cn_profile(
+        adata,
+        cell_id,
+        state_layer_name='state',
+        value_layer_name='copy',
+        ax=ax,
+        squashy=True,
+        linewidth=0,
+        s=4,
+        alpha=1.,
+        hue_order=sorted(range(12)))
+    sns.despine(trim=True)
+
+    sns.move_legend(
+        ax, 'upper left', prop={'size': 8}, markerscale=5, bbox_to_anchor=(1, 1),
+        labelspacing=0.4, handletextpad=0, columnspacing=0.5,
+        ncol=3, title='Total CN state', title_fontsize=10, frameon=False)
+
+    ax.grid(ls=':', lw=0.5, zorder=-100, which='major', axis='y')
+    ax.set_axisbelow(True)
+
+    plot_data['ascn_state'] = 'Balanced'
+    plot_data.loc[plot_data['A'] > plot_data['B'], 'ascn_state'] = 'A-Gained'
+    plot_data.loc[plot_data['B'] > plot_data['A'], 'ascn_state'] = 'B-Gained'
+    plot_data.loc[plot_data['B'] == 0, 'ascn_state'] = 'A-Hom'
+    plot_data.loc[plot_data['A'] == 0, 'ascn_state'] = 'B-Hom'
+
+    ax = axes[1]
+    scgenome.pl.plot_profile(
+        plot_data,
+        y='BAF',
+        hue='ascn_state',
+        ax=ax,
+        palette=allele_state_colors,
+        s=4,
+        alpha=1.,
+        hue_order=allele_state_colors.keys(),
+    )
+
+    plt.ylabel('BAF')
+    sns.despine(trim=True)
+
+    scgenome.plotting.cn.setup_genome_xaxis_ticks(
+        ax, chromosome_names=dict(zip(
+            [str(a) for a in range(1, 23)] + ['X'],
+            ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '11', '', '13', '', '15', '', '', '18', '', '', '21', '', 'X'])))
+
+    sns.move_legend(
+        ax, 'upper left', prop={'size': 8}, markerscale=5, bbox_to_anchor=(1, 1),
+        labelspacing=0.4, handletextpad=0, columnspacing=0.5,
+        ncol=1, title='AS CN state', title_fontsize=10, frameon=False)
+
+    ax.grid(ls=':', lw=0.5, zorder=-100, which='major', axis='y')
+    ax.set_axisbelow(True)
+
+    return fig
+
+
+def pretty_pseudobulk_tcn(adata, chromosome=None, fig=None, ax=None,
+                         value_layer_name='copy', state_layer_name='state'):
+    """
+    Plot a pretty pseudobulk total copy number profile.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix containing the copy number information.
+    chromosome : str, optional
+        Chromosome for which to generate the plot. If None, the plot will include all chromosomes.
+    fig : numpy.ndarray, optional
+        The generated matplotlib figure object.
+    ax : numpy.ndarray, optional
+        The matplotlib axes object.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The generated matplotlib figure object.
+
+    Notes
+    -----
+    This function generates a pretty pseudobulk total copy number profile plot using the provided AnnData object.
+    The plot shows the copy number profile for a pseudobulk sample, which is an aggregated representation of the individual cells.
+    The copy number values are plotted against the genomic coordinates.
+
+    The function uses the 'copy' and 'state' layers from the adata object to calculate the aggregated copy number values.
+    The 'copy' layer represents the copy number values for each cell, while the 'state' layer represents the copy number state.
+    The aggregated copy number values are then plotted using a scatter plot, with each point representing a genomic coordinate.
+    The color of the points represents the copy number state.
+
+    The plot also includes a legend that shows the mapping between the copy number state and the color used in the plot.
+    The legend is positioned in the upper left corner of the plot.
+
+    The x-axis of the plot represents the genomic coordinates, with tick labels corresponding to the chromosome numbers.
+    The tick labels are customized to show the chromosome numbers instead of the default tick values.
+
+    Examples
+    --------
+    >>> fig = pretty_pseudobulk_tcn(adata)
+    >>> plt.show()
+    """
+
+    agg_layers = {
+        'copy': np.nanmean,
+        'state': np.nanmedian,
+    }
+
+    adata.obs['pseudobulk'] = '1'
+    adata_pseudobulk = scgenome.tl.aggregate_clusters(adata, agg_layers=agg_layers, cluster_col='pseudobulk')
+
+    if fig is None:
+        fig = plt.figure(figsize=(6, 1.5), dpi=300)
+
+    if ax is None:
+        ax = plt.gca()
+
+    g = scgenome.pl.plot_cn_profile(
+        adata_pseudobulk,
+        '1',
+        state_layer_name=state_layer_name,
+        value_layer_name=value_layer_name,
+        chromosome=chromosome,
+        ax=ax,
+        squashy=True,
+        linewidth=0,
+        s=4,
+        alpha=1.,
+        hue_order=sorted(range(12)))
+    # sns.despine(trim=True)
+
+    sns.move_legend(
+        ax, 'upper left', prop={'size': 8}, markerscale=5, bbox_to_anchor=(1, 1),
+        labelspacing=0.4, handletextpad=0, columnspacing=0.5,
+        ncol=3, title='Total CN state', title_fontsize=10, frameon=False)
+    
+    ax.grid(ls=':', lw=0.5, zorder=-100, which='major', axis='y')
+    ax.set_axisbelow(True)
+
+    if chromosome is None:
+        scgenome.plotting.cn.setup_genome_xaxis_ticks(
+            ax, chromosome_names=dict(zip(
+                [str(a) for a in range(1, 23)] + ['X'],
+                ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '11', '', '13', '', '15', '', '', '18', '', '', '21', '', 'X'])))
+
+    return fig
+
+
+def make_subclonalitydf(cn):
+    refinfo = wgs_analysis.refgenome.RefGenomeInfo('grch38')
+    chroms = [c.replace('chr', '') for c in refinfo.chromosomes]
+    cols = ['chromosome', 'start', 'end', 'is_subclonal']
+    data = []
+    for rix, row in cn.iterrows():
+        chrom, start, end, sub = row['chromosome'], row['start'], row['end'], round(row['is_subclonal'], 0)
+        if sub:
+            field = [chrom, start, end-1, 1]
+            data.append(field)
+            field = [chrom, end-1, end, 1]
+            data.append(field)
+        else:
+            field = [chrom, start, end, 0]
+            data.append(field)
+    subdf = pd.DataFrame(data, columns=cols)
+    subdf['start'] = subdf['start'] + subdf['chromosome'].str.replace('chr','').map(dict(zip(chroms, refinfo.chromosome_start)))
+    subdf['end'] = subdf['end'] + subdf['chromosome'].str.replace('chr','').map(dict(zip(chroms, refinfo.chromosome_start)))
+
+    return subdf
+
+
+def plot_subclonality_to_remixt_cn(df, ax, genome_version='grch38'):
+    assert 'major_1' in df.columns, df.columns
+    assert 'major_2' in df.columns, df.columns
+    assert 'minor_1' in df.columns, df.columns
+    assert 'minor_2' in df.columns, df.columns
+    refinfo = wgs_analysis.refgenome.RefGenomeInfo(genome_version)
+    chroms = [c.replace('chr', '') for c in refinfo.chromosomes]
+    if 'chromosome' not in df.columns:
+        if 'chr' in df.columns:
+            df = df.rename(columns={'chr':'chromosome'})
+    if 'start' not in df.columns:
+        if 'Start.bp' in df.columns:
+            df = df.rename(columns={'Start.bp':'start'})
+    if 'start' not in df.columns:
+        if 'Start.bp' in df.columns:
+            df = df.rename(columns={'Start.bp':'start'})
+    df['major_subclonal'] = (df['major_1'] != df['major_2'])
+    df['minor_subclonal'] = (df['minor_1'] != df['minor_2'])
+    df['is_subclonal'] = (df['major_subclonal'] | df['minor_subclonal']).astype(int)
+    subdf = make_subclonalitydf(df)
+    ax.fill_between(x=subdf['start'], y1=8*subdf['is_subclonal'], where=subdf['is_subclonal']>0, 
+                    color='tab:orange', interpolate=False, step='post', alpha=0.5, rasterized=True)
+
+    leg = ax.legend(['major', 'minor'], loc=(1.01, 0.3), frameon=False);
+    leg.legendHandles[0].set_color('tab:red')
+    leg.legendHandles[1].set_color('tab:blue')
+
+
+def plot_subclonality_to_consensus_cn(df, ax, genome_version='grch38'):
+    assert 'HZ' in df.columns, df.columns
+    refinfo = wgs_analysis.refgenome.RefGenomeInfo(genome_version)
+    chroms = [c.replace('chr', '') for c in refinfo.chromosomes]
+    if 'chromosome' not in df.columns:
+        if 'chr' in df.columns:
+            df = df.rename(columns={'chr':'chromosome'})
+    if 'start' not in df.columns:
+        if 'Start.bp' in df.columns:
+            df = df.rename(columns={'Start.bp':'start'})
+    if 'start' not in df.columns:
+        if 'Start.bp' in df.columns:
+            df = df.rename(columns={'Start.bp':'start'})
+    df['is_subclonal'] = df['HZ'].astype(int)
+    subdf = make_subclonalitydf(df)
+    ax.fill_between(x=subdf['start'], y1=8*subdf['is_subclonal'], where=subdf['is_subclonal']>0, 
+                    color='tab:orange', interpolate=False, step='post', alpha=0.5, rasterized=True)
+
+    leg = ax.legend(['major', 'minor'], loc=(1.01, 0.3), frameon=False);
+    leg.legendHandles[0].set_color('tab:red')
+    leg.legendHandles[1].set_color('tab:blue')
+
+
+def plot_remixt_pair_cn_with_subclonality_and_title(tumor_id, model_id, remixt, tumor_title='', model_title='', figsize=(15, 9), 
+        cn_dir='../data/wgs/cn/consensus', genome_version='grch38', return_fig=False):
+    refinfo = wgs_analysis.refgenome.RefGenomeInfo(genome_version)
+    chroms = [c.replace('chr', '') for c in refinfo.chromosomes]
+    with matplotlib.rc_context({'font.family':'Arial', 'font.size':10}):
+        cn_tumor = load_remixt_cn(tumor_id, remixt)
+        cn_model = load_remixt_cn(model_id, remixt)
+        cn_tumor['chr'] = pd.Categorical(cn_tumor['chr'], categories=chroms, ordered=True)
+        cn_model['chr'] = pd.Categorical(cn_model['chr'], categories=chroms, ordered=True)
+        cn_tumor.sort_values(['chr', 'start', 'end'], inplace=True)
+        cn_model.sort_values(['chr', 'start', 'end'], inplace=True)
+        assert cn_tumor.shape[0] > 0, cn_tumor
+        assert cn_model.shape[0] > 0, cn_model
+
+        cn_consensus_tumor = load_consensus_cn(tumor_id, cn_dir=cn_dir)
+        try:
+            cn_consensus_tumor.rename(columns={'chromosome':'chr'}, inplace=True)
+            cn_consensus_tumor['chr'] = pd.Categorical(cn_consensus_tumor['chr'].str.replace('chr', ''), categories=chroms, ordered=True)
+            cn_consensus_tumor.sort_values(['chr', 'start', 'end'], inplace=True)
+            cn_consensus_model = load_consensus_cn(model_id, cn_dir=cn_dir)
+            cn_consensus_model.rename(columns={'chromosome':'chr'}, inplace=True)
+            cn_consensus_model['chr'] = pd.Categorical(cn_consensus_model['chr'].str.replace('chr', ''), categories=chroms, ordered=True)
+            cn_consensus_model.sort_values(['chr', 'start', 'end'], inplace=True)
+        except:
+            print(tumor_id, model_id)
+        
+        fig, axes = plt.subplots(4, 1, figsize=figsize, gridspec_kw={'hspace':0.8})
+        ax1, ax2, ax3, ax4 = axes
+        
+        plot_cn_genome(ax1, cn_tumor, major_col='major_raw', minor_col='minor_raw', squashy=True, scatter=True)
+        ax1.set_title(tumor_title, color='tab:red');
+        ax1.set_ylabel('copy number')
+        plot_subclonality_to_remixt_cn(cn_tumor, ax1)
+        
+        plot_cn_genome(ax2, cn_model, major_col='major_raw', minor_col='minor_raw', squashy=True, scatter=True)
+        ax2.set_title(model_title, color='tab:blue');
+        ax2.set_ylabel('copy number')
+        plot_subclonality_to_remixt_cn(cn_model, ax2)
+        
+        plot_cn_genome(ax3, cn_consensus_tumor, major_col='rescaled.cn.a2', minor_col='rescaled.cn.a1', squashy=True, scatter=False)
+        ax3.set_title(tumor_title + ' [consensus CN]', color='tab:red');
+        ax3.set_ylabel('copy number')
+        plot_subclonality_to_consensus_cn(cn_consensus_tumor, ax3)
+        
+        plot_cn_genome(ax4, cn_consensus_model, major_col='rescaled.cn.a2', minor_col='rescaled.cn.a1', squashy=True, scatter=False)
+        ax4.set_title(model_title + ' [consensus CN]', color='tab:blue');
+        ax4.set_ylabel('copy number')
+        plot_subclonality_to_consensus_cn(cn_consensus_model, ax4)
+        
+        plt.tight_layout()
+    if return_fig:
+        return fig
+
+def plot_remixt_expanded_model_plots(tumor_id, model_id, model_expanded_id, remixt, tumor_title='', model_title='', model_expanded_title='', 
+        figsize=(15, 13), cn_dir='../data/wgs/cn/consensus', genome_version='grch38', return_fig=False):
+    refinfo = wgs_analysis.refgenome.RefGenomeInfo(genome_version)
+    chroms = [c.replace('chr', '') for c in refinfo.chromosomes]
+    with matplotlib.rc_context({'font.family':'Arial', 'font.size':10}):
+        cn_tumor = load_remixt_cn(tumor_id, remixt)
+        cn_model = load_remixt_cn(model_id, remixt)
+        cn_model_expanded = load_remixt_cn(model_expanded_id, remixt)
+        cn_tumor['chr'] = pd.Categorical(cn_tumor['chr'], categories=chroms, ordered=True)
+        cn_model['chr'] = pd.Categorical(cn_model['chr'], categories=chroms, ordered=True)
+        cn_model_expanded['chr'] = pd.Categorical(cn_model_expanded['chr'], categories=chroms, ordered=True)
+        cn_tumor.sort_values(['chr', 'start', 'end'], inplace=True)
+        cn_model.sort_values(['chr', 'start', 'end'], inplace=True)
+        cn_model_expanded.sort_values(['chr', 'start', 'end'], inplace=True)
+        assert cn_tumor.shape[0] > 0, cn_tumor
+        assert cn_model.shape[0] > 0, cn_model
+        assert cn_model_expanded.shape[0] > 0, cn_model_expanded
+
+        cn_consensus_tumor = load_consensus_cn(tumor_id, cn_dir=cn_dir)
+        try:
+            cn_consensus_tumor.rename(columns={'chromosome':'chr'}, inplace=True)
+            cn_consensus_tumor['chr'] = pd.Categorical(cn_consensus_tumor['chr'].str.replace('chr', ''), categories=chroms, ordered=True)
+            cn_consensus_tumor.sort_values(['chr', 'start', 'end'], inplace=True)
+            cn_consensus_model = load_consensus_cn(model_id, cn_dir=cn_dir)
+            cn_consensus_model.rename(columns={'chromosome':'chr'}, inplace=True)
+            cn_consensus_model['chr'] = pd.Categorical(cn_consensus_model['chr'].str.replace('chr', ''), categories=chroms, ordered=True)
+            cn_consensus_model.sort_values(['chr', 'start', 'end'], inplace=True)
+            cn_consensus_model_expanded = load_consensus_cn(model_expanded_id, cn_dir=cn_dir)
+            cn_consensus_model_expanded.rename(columns={'chromosome':'chr'}, inplace=True)
+            cn_consensus_model_expanded['chr'] = pd.Categorical(cn_consensus_model_expanded['chr'].str.replace('chr', ''), categories=chroms, ordered=True)
+            cn_consensus_model_expanded.sort_values(['chr', 'start', 'end'], inplace=True)
+        except:
+            print(tumor_id, model_id, model_expanded_id)
+        
+        fig, axes = plt.subplots(6, 1, figsize=figsize, gridspec_kw={'hspace':0.8})
+        ax1, ax2, ax3, ax4, ax5, ax6 = axes
+        
+        plot_cn_genome(ax1, cn_tumor, major_col='major_raw', minor_col='minor_raw', squashy=True, scatter=True)
+        ax1.set_title(tumor_title, color='tab:red');
+        ax1.set_ylabel('copy number')
+        plot_subclonality_to_remixt_cn(cn_tumor, ax1)
+        
+        plot_cn_genome(ax2, cn_model, major_col='major_raw', minor_col='minor_raw', squashy=True, scatter=True)
+        ax2.set_title(model_title, color='tab:blue');
+        ax2.set_ylabel('copy number')
+        plot_subclonality_to_remixt_cn(cn_model, ax2)
+        
+        plot_cn_genome(ax3, cn_model_expanded, major_col='major_raw', minor_col='minor_raw', squashy=True, scatter=True)
+        ax3.set_title(model_expanded_title, color='tab:blue');
+        ax3.set_ylabel('copy number')
+        plot_subclonality_to_remixt_cn(cn_model_expanded, ax3)
+        
+        plot_cn_genome(ax4, cn_consensus_tumor, major_col='rescaled.cn.a2', minor_col='rescaled.cn.a1', squashy=True, scatter=False)
+        ax4.set_title(tumor_title + ' [consensus CN]', color='tab:red');
+        ax4.set_ylabel('copy number')
+        plot_subclonality_to_consensus_cn(cn_consensus_tumor, ax4)
+        
+        plot_cn_genome(ax5, cn_consensus_model, major_col='rescaled.cn.a2', minor_col='rescaled.cn.a1', squashy=True, scatter=False)
+        ax5.set_title(model_title + ' [consensus CN]', color='tab:blue');
+        ax5.set_ylabel('copy number')
+        plot_subclonality_to_consensus_cn(cn_consensus_model, ax5)
+        
+        plot_cn_genome(ax6, cn_consensus_model_expanded, major_col='rescaled.cn.a2', minor_col='rescaled.cn.a1', squashy=True, scatter=False)
+        ax6.set_title(model_expanded_title + ' [consensus CN]', color='tab:blue');
+        ax6.set_ylabel('copy number')
+        plot_subclonality_to_consensus_cn(cn_consensus_model_expanded, ax6)
+        
+        plt.tight_layout()
+    if return_fig:
+        return fig
+
+
+def create_tumor_model_plot(adata, tumor_id, model_id, chromosomes=None):
+
+    if chromosomes is None:
+        chromosomes = list(str(a) for a in range(1, 23))
+
+    scgenome.refgenome.set_genome_version(
+        'grch38',
+        chromosomes=[f'chr{a}' for a in range(1, 23)],
+        plot_chromosomes=[f'{a}' for a in range(1, 23)])
+
+    fig, axes = plt.subplots(2, 1, figsize=(6, 3), dpi=300)
+    
+    chromosome_names = dict([(f'chr{a}', f'{a}') for a in chromosomes])
+    for c in ['chr10', 'chr12', 'chr14', 'chr16', 'chr17', 'chr19', 'chr20', 'chr22']:
+        chromosome_names[c] = ''
+
+    chromosome_names_empty = dict([(f'chr{a}', '') for a in range(1, 23)])
+
+    ax = axes[0]
+    plot_cn_rect(adata, tumor_id, y='major_cn', hue=None, color='#c94242', rect_kws={'height': 0.2}, offset=0.15, ax=ax)
+    plot_cn_rect(adata, tumor_id, y='minor_cn', hue=None, color='#3a79de', rect_kws={'height': 0.2}, offset=-0.15, ax=ax)
+    setup_genome_xaxis_ticks(ax, chromosome_names=chromosome_names_empty)
+    ax.set_ylim((-0.5, 5.5))
+    ax.set_yticks(range(0, 6))
+    ax.set_ylabel('CN', rotation=0, ha='right')
+    ax.grid(color='gray', linestyle='--', linewidth=0.5)
+    ax.set_title(f'{tumor_id} (tumor)')
+
+    ax = axes[1]
+    plot_cn_rect(adata, model_id, y='major_cn', hue=None, color='#c94242', rect_kws={'height': 0.2}, offset=0.15, ax=ax)
+    plot_cn_rect(adata, model_id, y='minor_cn', hue=None, color='#3a79de', rect_kws={'height': 0.2}, offset=-0.15, ax=ax)
+    setup_genome_xaxis_ticks(ax, chromosome_names=chromosome_names)
+    ax.set_ylim((-0.5, 5.5))
+    ax.set_yticks(range(0, 6))
+    ax.set_ylabel('CN', rotation=0, ha='right')
+    ax.set_title(f'{model_id} (model)')
+    ax.grid(color='gray', linestyle='--', linewidth=0.5)
+
+    plt.subplots_adjust(hspace=0.5)
+
+    return fig, axes

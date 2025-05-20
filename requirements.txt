@@ -1,0 +1,14 @@
+anndata
+click
+matplotlib
+numpy
+pandas
+panel
+pyranges
+pytest
+PyYAML
+scgenome
+seaborn
+setuptools
+tqdm
+wgs_analysis

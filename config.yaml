@@ -1,0 +1,130 @@
+python_bin: /home/chois7/miniforge3/envs/py11/bin/python3.11
+
+base_dir: ../../ # directory where results will be wrote
+data_dir: /data1/shahs3/users/chois7/projects/GDAN/HCMI/cn-data # directory for downloaded data
+
+fasta: /data1/shahs3/isabl_data_lake/assemblies/WGS-GRCh38-GDC/human/GRCh38.d1.vd1.fa
+gtf: /data1/shahs3/isabl_data_lake/assemblies/WGS-GRCh38-GDC/human/Homo_sapiens.GRCh38.93.gtf
+refflat: /data1/shahs3/users/chois7/databases/annotations/GRCh38/refFlat.txt.gz # from https://hgdownload.soe.ucsc.edu/goldenPath/hg38/database/refFlat.txt.gz
+
+vep:
+    data: /data1/shahs3/isabl_data_lake/assemblies/mondrian-ref-GRCh38/human/vep 
+    cache_version: 105
+    ref_fasta: /data1/shahs3/isabl_data_lake/assemblies/mondrian-ref-GRCh38/human/vep/homo_sapiens/105_GRCh38/Homo_sapiens.GRCh38.dna.toplevel.fa.gz 
+    ncbi_build: GRCh38
+
+HCMI:
+    # metadata: metadata/common/TCGA_Codes.tsv # from https://www.synapse.org/Synapse:syn62672242
+    metadata: metadata/common/Supplemenary_Table_S1_2_20241201.tsv # from https://www.synapse.org/Synapse:syn64319233
+    analysis_tracker: metadata/common/analysis_tracker__dna_analysis_updated.csv # from https://docs.google.com/spreadsheets/d/1Elgbqzi_mKaeGjhw74pg2_5GMNUUm2Rn7bjTitIWclQ/edit?gid=299109243#gid=299109243
+    pairs_map: metadata/common/tm-linkage-v3.tsv # from https://www.synapse.org/Synapse:syn53643769
+    purity_ploidy_table: metadata/wgs/10.26.24_final_consensus_pp.txt # from https://www.synapse.org/Synapse:syn58923374
+    samples_to_exclude: metadata/wgs/excluded_models.csv
+
+    cohort: data/tables/events/cohort.pkl
+    cohort_final: data/tables/events/cohort.final.pkl
+    cohort_table: data/tables/events/cohort.csv
+    notes: data/tables/events/notes.csv
+    events: data/tables/events/events.csv
+    summary: data/tables/events/summary.csv
+    counts: data/tables/events/counts.csv
+    genes_to_exclude:
+        - APOB
+        - CDK8
+    cn:
+        driver_genes: metadata/wgs/genes_per_cancer_type.yaml
+        curated_events: metadata/wgs/cnv_genes.yaml
+        remixt: 
+            paths: metadata/wgs/isabl_remixt-postprocess_paths.10302024.tsv # from isabl remixt table (MSKCC)
+            intermediate_dir: data/tables/intermediate/remixt
+        consensus: 
+            paths: metadata/wgs/paths.hcmi_consensus.csv
+            cn_dir: data/wgs/cn/consensus # from https://www.synapse.org/Synapse:syn63102496
+            intermediate_dir: data/tables/intermediate/consensus
+        anndata: 
+            segment: data/anndata/cn.bin50k.HCMI-consensus.h5ad
+            annotated: data/anndata/cn_obs.bin50k.HCMI-consensus.h5ad
+            genelevel: data/anndata/cn_obs_gene.bin50k.HCMI-consensus.h5ad
+        anndata_remixt:
+            segment: data/anndata/cn.bin50k.HCMI-remixt.h5ad
+            annotated: data/anndata/cn_obs.bin50k.HCMI-remixt.h5ad
+            genelevel: data/anndata/cn_obs_gene.bin50k.HCMI-remixt.h5ad
+        events: data/tables/events/events.cnv.csv
+        genelevel:
+            cnv: data/tables/genelevel/cnv_raw.tsv
+            cnv_merged: data/tables/genelevel/cnv_merged.tsv
+        pairwise: data/tables/figure2/pairwise.csv
+    mutation:
+        raw_vcf_dir: data/wgs/plusReadSupportAndM2MultiPass
+        raw_vcf_paths: data/tables/vcf_paths/vcf_paths.wgs.csv
+        raw_maf_dir_exome: /data1/shahs3/users/chois7/projects/GDAN/HCMI/mutation/data/broad/FF_paired/renamed
+        maf_dir: data/maf
+        paths: metadata/wgs/vcf_paths.csv
+        paths_exome: metadata/wgs/vcf_paths_exome.csv
+        vcf_dir: data/tables/vep_vcf # TODO: integrate from source
+        vcf_dir_exome: data/tables/vep_vcf_exome # TODO: integrate from source
+        samples_file: metadata/wgs/samples_for_snvindels.txt
+        driver_genes: metadata/wgs/driver_mutations.tsv
+        vcf_table: metadata/wgs/vcf_paths.csv
+        vcf_table_exome: metadata/wgs/vcf_paths_exome.csv
+        variant_data_dir: data/tables/variants_data
+        variant_data_dir_exome: data/tables/variants_data_exome
+        anndata: 
+            genelevel: data/anndata/snv_indel.HCMI.h5ad
+        events: data/tables/events/events.snvindel.csv
+        events_exome: data/tables/events/events.snvindel-exome.csv
+        pyclone_cases: metadata/wgs/cases.pyclone.txt
+        pyclone_dir: /data1/shahs3/users/mcphera1/repos/gdan-hcmi/data/evolution/run_pyclone
+    germline:
+        paths: metadata/wgs/germline.vcf_paths.csv
+        vcf_dir: data/tables/vep_vcf_germline
+        bed: data/tables/germline/exons.bed
+        pathogenic: metadata/wgs/germline_pathogenic.csv
+        brcaexchange: metadata/wgs/brcaexchange.tsv
+        tables_dir: data/tables/germline_annotated
+        events: data/tables/events/germline_events.csv
+    freq: data/tables/figure3/freq.csv
+    circos: # TODO: smarter of handling a large number of samples
+        dir: data/tables/circos
+        samples_file: metadata/wgs/samples.circos.txt
+
+plots:
+    dir: plots
+    fig2E: plots/Fig2E.pdf
+    fig3A: plots/Fig3A.pdf
+    fig3A_supplementary: plots/Fig3A.supplementary.pdf
+    fig2C_1: plots/Fig2C_1.pdf
+    fig2C_2: plots/Fig2C_2.pdf
+    fig2D: plots/Fig2D.pdf
+    pyclone_dir: plots/pyclone
+
+TCGA: 
+    cohort_table: data/tables/events/cohort.TCGA.csv
+    metadata: external/tcga/metadata/sample_sheet.tsv
+    pairs_map: None
+    purity_ploidy_table: None
+    cn: 
+        paths: external/tcga/data/cn
+        anndata:
+            segment: data/anndata/cn.bin50k.TCGA.h5ad
+            annotated: data/anndata/cn_obs.bin50k.TCGA.h5ad
+            genelevel: data/anndata/cn_obs_gene.bin50k.TCGA.h5ad
+        events: data/tables/events/events.TCGA.cnv.csv
+    mutation:
+        maf_table: metadata/wgs/tcga_maf_paths.csv
+        anndata:
+            genelevel: data/anndata/snv_indel.TCGA.h5ad
+        events: data/tables/events/events.TCGA.snvindel.csv
+    summary: data/tables/events/summary.TCGA.csv
+    counts: data/tables/events/counts.TCGA.csv
+    freq: data/tables/figure3/freq.TCGA.csv
+
+
+PCAWG: 
+    metadata: external/pcawg/metadata/2018-07-24-wgdMrcaTiming.txt
+    cn: 
+        paths: external/pcawg/consensus_cnv/consensus_somatic_cna/hg19
+        anndata:
+            segment: data/anndata/cn.bin50k.PCAWG.h5ad
+            annotated: data/anndata/cn_obs.bin50k.PCAWG.h5ad
+
