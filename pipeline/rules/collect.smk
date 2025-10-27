@@ -62,7 +62,7 @@ rule make_anndata_tcga:
     params:
         bin_size = 50000,
     resources:
-        mem_mb=80000,
+        mem_mb=240000,
     shell:
         '{python_bin} ../scripts/make_anndata_tcga.py -c {input.cn_dir} -o {output.h5ad} '
         '-b {params.bin_size}'

@@ -119,12 +119,3 @@ TCGA:
     counts: data/tables/events/counts.TCGA.csv
     freq: data/tables/figure3/freq.TCGA.csv
 
-
-PCAWG: 
-    metadata: external/pcawg/metadata/2018-07-24-wgdMrcaTiming.txt
-    cn: 
-        paths: external/pcawg/consensus_cnv/consensus_somatic_cna/hg19
-        anndata:
-            segment: data/anndata/cn.bin50k.PCAWG.h5ad
-            annotated: data/anndata/cn_obs.bin50k.PCAWG.h5ad
-

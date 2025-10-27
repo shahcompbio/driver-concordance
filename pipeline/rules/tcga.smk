@@ -8,6 +8,8 @@ rule make_genelevel_anndata_tcga:
     output:
         h5ad = os.path.join(base, config['TCGA']['cn']['anndata']['genelevel']),
         events_cn = os.path.join(base, config['TCGA']['cn']['events']),
+    resources:
+        mem_mb=80000,
     shell:
         '{python_bin} ../scripts/make_genelevel_anndata_tcga.py -i {input.h5ad} '
         '-d {input.curated_events} -r {input.refflat} -og {output.h5ad} -oe {output.events_cn}'
@@ -58,18 +60,6 @@ rule make_data_for_fig3A:
         '--notes_hcmi {input.notes_hcmi} --cohort_hcmi {input.cohort_hcmi} '
         '--freq {output.freq}'
 
-rule plot_fig3A:
-    input:
-        freq = os.path.join(base, config['HCMI']['freq']),
-    output:
-        pdf = os.path.join(base, config['plots']['fig3A']),
-    params:
-        top_n_genes = 5,
-        min_samples = 10,
-    shell:
-        '{python_bin} ../scripts/plot_fig3A.py --freq {input.freq} --fig_path {output.pdf} '
-        '--min_samples_per_cancer_type {params.min_samples} --n_top_genes_to_show {params.top_n_genes}'
-
 rule plot_fig3A_supplementary:
     input:
         freq = os.path.join(base, config['HCMI']['freq']),
@@ -78,9 +68,9 @@ rule plot_fig3A_supplementary:
     params:
         top_n_genes = 5,
         min_samples = 1, # show all cohort as long as min 1 sample exists
-        figwidth = 12,
-        figheight = 8,
-        nrow = 3,
+        figwidth = 20,
+        figheight = 5,
+        nrow = 2,
     shell:
         '{python_bin} ../scripts/plot_fig3A.py --freq {input.freq} --fig_path {output.pdf} '
         '--min_samples_per_cancer_type {params.min_samples} --n_top_genes_to_show {params.top_n_genes} '

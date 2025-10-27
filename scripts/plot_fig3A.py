@@ -27,7 +27,7 @@ def plot_fig3A(freq, min_samples_per_cancer_type, n_top_genes_to_show, figwidth,
         fig_y = 1.0
 
     with matplotlib.rc_context({'font.family':'Arial'}):
-        fig, axes = plt.subplots(nrow, ncol, figsize=(figwidth, figheight), gridspec_kw={'hspace':1.3, 'wspace':1})
+        fig, axes = plt.subplots(nrow, ncol, figsize=(figwidth, figheight), gridspec_kw={'hspace':1.3, 'wspace':1.1})
         fig.suptitle('Driver events', y=fig_y)
         for ix, tt in enumerate(tts):
             tt_freq = freqs[freqs['cancer_type']==tt].iloc[:n_top_genes_to_show]
@@ -42,8 +42,8 @@ def plot_fig3A(freq, min_samples_per_cancer_type, n_top_genes_to_show, figwidth,
                 ax.bar(x=xs + cix*width, height=heights, width=width, color=color, label=cohort)
             xmin, xmax = ax.get_xlim()
             ymin, ymax = ax.get_ylim()
-            ax.text(x=(xmin+xmax)/2 * 0.8, y=1.15 * ymax, s=f'(HCMI: {n_hcmi:d}, TCGA: {n_tcga:d})', ha='center', va='center')
-            ax.set_title(f'{tt}\n', fontsize=12)
+            ax.text(x=(xmin+xmax)/2 * 0.8, y=1.15 * ymax, s=f'HCMI: {n_hcmi:d}\nTCGA: {n_tcga:d}', ha='center', va='center')
+            ax.set_title(f'{tt}\n', fontsize=12, y=1.1)
             ax.set_xticks(np.arange(tt_freq.shape[0]) + width/2)
             ax.set_xticklabels(tt_freq['gene'], rotation=90)
             ax.spines[['right', 'top']].set_visible(False)
